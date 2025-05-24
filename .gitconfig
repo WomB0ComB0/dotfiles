@@ -1,0 +1,48 @@
+[credential "https://github.com"]
+    helper = 
+    helper = !/usr/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+    helper = 
+    helper = !/usr/bin/gh auth git-credential
+[filter "lfs"]
+    clean = git-lfs clean -- %f
+    smudge = git-lfs smudge -- %f
+    process = git-lfs filter-process
+    required = true
+[user]
+    name = <name>
+    email = <email>
+[alias]
+    quick = "!sh -c 'git add . && git commit -m \"$0\" && git push' "
+    message = "!sh -c 'git add . && git commit -m \"$0\"' "
+    daily = "!sh -c 'git add . && git commit -m \"Daily commit $(date)\" && git pull --rebase && git push' "
+    acp = "!sh -c 'git add . && git commit -m \"Quick commit\" && git push' "
+    create = "!sh -c 'git init && git add . && git commit -m \"feat: init - $(date)\" && gh repo create $(echo ${PWD##*/}) --source . --push --public'"
+    # Log aliases
+    lg = log --graph --pretty=format:'%C(yellow)%h%C(reset) - %C(cyan)%an%C(reset) %C(red)%d%C(reset) %C(white)%s%C(reset) %C(green)(%cr)%C(reset)' --abbrev-commit
+    hist = log --pretty=format:'%h %ad | %s%d [%an]' --graph --date=short
+
+    # Diff aliases
+    ds = diff --staged
+    dc = diff --cached
+
+    # Undo commit
+    undo = reset --soft HEAD~1
+
+    # Reset and clean
+    clean = "!git reset --hard && git clean -fd"
+
+    # Fetch and prune
+    fp = "!git fetch --prune"
+
+    # Checkout branch
+    co = checkout
+
+    # Pull with rebase
+    pr = pull --rebase
+
+    # Squash last X commits
+    squash = "!f() { git reset --soft HEAD~$1 && git commit --edit -m \"$2\"; }; f"
+
+    # AI command for auto commit messages
+    ai = "!sh -c 'git add . && git commit -m \"$(git diff --cached --diff-filter=ACMRTUXB $(grep -v \"^#\" ~/.config/git/gitdiff-exclude | xargs -I {} sh -c \"test -e {} && echo :!{}\") | ask cm -m gemini-2.0-flash \"Could you write a commit message for this? I don’t want your meta data\")\" && git push' "

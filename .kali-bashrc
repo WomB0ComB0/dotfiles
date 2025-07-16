@@ -8,10 +8,12 @@ case $- in
       *) return;;
 esac
 
-# Ensure we're running in bash
+# Ensure we're running in bash - exit early if not
 if [ -z "$BASH_VERSION" ]; then
     echo "Warning: This .bashrc is designed for bash, but you're running a different shell."
-    return
+    echo "Current shell: $0"
+    echo "To switch to bash, run: chsh -s /bin/bash"
+    return 2>/dev/null || exit
 fi
 
 # ===== HISTORY CONFIGURATION =====
@@ -19,9 +21,7 @@ fi
 HISTCONTROL=ignoreboth:erasedups
 
 # Append to the history file, don't overwrite it
-if command -v shopt &> /dev/null && [ -n "$BASH_VERSION" ]; then
-    shopt -s histappend
-fi
+shopt -s histappend
 
 # For setting history length see HISTSIZE and HISTFILESIZE in bash(1)
 HISTSIZE=10000
@@ -35,25 +35,24 @@ export HISTTIMEFORMAT="%F %T "
 
 # ===== SHELL OPTIONS =====
 # Check the window size after each command and update LINES and COLUMNS
-if command -v shopt &> /dev/null && [ -n "$BASH_VERSION" ]; then
-    shopt -s checkwinsize
-    # Autocorrect typos in path names when using `cd`
-    shopt -s cdspell
-    # Enable recursive globbing with **
-    shopt -s globstar
-    # Bash won't get SIGWINCH if another process is in the foreground.
-    shopt -s checkjobs
-fi
+shopt -s checkwinsize
 
-# Enable programmable completion - only if bash and complete command exists
-if [ -n "$BASH_VERSION" ] && command -v complete &> /dev/null; then
-    if ! shopt -oq posix 2>/dev/null; then
-      if [ -f /usr/share/bash-completion/bash_completion ]; then
-        . /usr/share/bash-completion/bash_completion
-      elif [ -f /etc/bash_completion ]; then
-        . /etc/bash_completion
-      fi
-    fi
+# Autocorrect typos in path names when using `cd`
+shopt -s cdspell
+
+# Enable recursive globbing with **
+shopt -s globstar
+
+# Bash won't get SIGWINCH if another process is in the foreground.
+shopt -s checkjobs
+
+# Enable programmable completion features
+if ! shopt -oq posix; then
+  if [ -f /usr/share/bash-completion/bash_completion ]; then
+    . /usr/share/bash-completion/bash_completion
+  elif [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+  fi
 fi
 
 # ===== APPEARANCE =====
@@ -82,7 +81,7 @@ if [ -n "$force_color_prompt" ]; then
 fi
 
 # Git prompt configuration - only load if git is installed
-if [ -x "$(command -v git)" ]; then
+if command -v git >/dev/null 2>&1; then
     # Check if git-prompt.sh exists
     if [ -f "/usr/share/git-core/contrib/completion/git-prompt.sh" ]; then
         source "/usr/share/git-core/contrib/completion/git-prompt.sh"
@@ -95,16 +94,16 @@ if [ -x "$(command -v git)" ]; then
     fi
     
     # Enable git prompt features
-    GIT_PS1_SHOWDIRTYSTATE=true
-    GIT_PS1_SHOWSTASHSTATE=true
-    GIT_PS1_SHOWUNTRACKEDFILES=true
-    GIT_PS1_SHOWUPSTREAM="auto"
-    GIT_PS1_SHOWCOLORHINTS=true
+    export GIT_PS1_SHOWDIRTYSTATE=true
+    export GIT_PS1_SHOWSTASHSTATE=true
+    export GIT_PS1_SHOWUNTRACKEDFILES=true
+    export GIT_PS1_SHOWUPSTREAM="auto"
+    export GIT_PS1_SHOWCOLORHINTS=true
 fi
 
 # Function to determine if git prompt is available
 __git_prompt_available() {
-    type -t __git_ps1 &>/dev/null
+    type -t __git_ps1 >/dev/null 2>&1
 }
 
 # Set the prompt

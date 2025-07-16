@@ -8,12 +8,18 @@ case $- in
       *) return;;
 esac
 
+# Ensure we're running in bash
+if [ -z "$BASH_VERSION" ]; then
+    echo "Warning: This .bashrc is designed for bash, but you're running a different shell."
+    return
+fi
+
 # ===== HISTORY CONFIGURATION =====
 # Don't put duplicate lines or lines starting with space in the history
 HISTCONTROL=ignoreboth:erasedups
 
 # Append to the history file, don't overwrite it
-if command -v shopt &> /dev/null; then
+if command -v shopt &> /dev/null && [ -n "$BASH_VERSION" ]; then
     shopt -s histappend
 fi
 
@@ -29,7 +35,7 @@ export HISTTIMEFORMAT="%F %T "
 
 # ===== SHELL OPTIONS =====
 # Check the window size after each command and update LINES and COLUMNS
-if command -v shopt &> /dev/null; then
+if command -v shopt &> /dev/null && [ -n "$BASH_VERSION" ]; then
     shopt -s checkwinsize
     # Autocorrect typos in path names when using `cd`
     shopt -s cdspell
@@ -39,13 +45,15 @@ if command -v shopt &> /dev/null; then
     shopt -s checkjobs
 fi
 
-# Enable programmable completion
-if ! shopt -oq posix 2>/dev/null; then
-  if [ -f /usr/share/bash-completion/bash_completion ]; then
-    . /usr/share/bash-completion/bash_completion
-  elif [ -f /etc/bash_completion ]; then
-    . /etc/bash_completion
-  fi
+# Enable programmable completion - only if bash and complete command exists
+if [ -n "$BASH_VERSION" ] && command -v complete &> /dev/null; then
+    if ! shopt -oq posix 2>/dev/null; then
+      if [ -f /usr/share/bash-completion/bash_completion ]; then
+        . /usr/share/bash-completion/bash_completion
+      elif [ -f /etc/bash_completion ]; then
+        . /etc/bash_completion
+      fi
+    fi
 fi
 
 # ===== APPEARANCE =====

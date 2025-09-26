@@ -1,3 +1,4 @@
+
 # -*- shell -*-
 # ~/.bashrc: executed by bash(1) for non-login shells.
 # see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
@@ -175,6 +176,7 @@ alias rm='rm -I'  # Less intrusive interactive
 alias clip='xclip -selection clipboard'
 alias sb='source ~/.bashrc'
 alias nb='nano ~/.bashrc'
+alias e='exit'
 
 # System management
 alias update='sudo pacman -Syu --noconfirm && echo "System updated with pacman"'
@@ -749,9 +751,30 @@ if command -v neofetch &> /dev/null; then
     neofetch
 fi
 
+# bun - One-time installation flag
+export PATH="$PATH:$HOME/.bun/bin"
+if ! command -v bun >/dev/null 2>&1 && [[ ! -f "$HOME/.bun_install_attempted" ]]; then
+    echo "[INFO] Installing Bun..."
+    if curl -fsSL https://bun.sh/install | bash; then
+        touch "$HOME/.bun_install_attempted"
+    fi
+fi
+
+# Auto-install missing dependencies
+if [ -f ~/.installrc ]; then
+    . ~/.installrc >/dev/null 2>&1
+    [[ -n "${INSTALLRC_BG_PID:-}" ]] && disown %% 2>/dev/null || true
+fi
+
+# pnpm
+export PNPM_HOME="/home/vboxuser/.local/share/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
+
+
 # bun
 export BUN_INSTALL="$HOME/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
-
-# Auto-install missing dependencies
-[ -f ~/.installrc ] && . ~/.installrc

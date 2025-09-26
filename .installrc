@@ -95,17 +95,9 @@ install_package_silent() {
     esac
 }
 
-# Background installation function
-install_missing_background() {
-    local pm
-    pm=$(detect_package_manager)
-    
-    [[ "$pm" == "unknown" ]] && return 1
-    
-    # Critical commands that should be available immediately
-    local critical_commands=(
-        "git" "curl" "wget" "tree" "unzip" "nano" "make" "gcc"
-    )
+# Separate function to handle background installation - this prevents the job description bleeding
+_installrc_background_worker() {
+    local pm="$1"
     
     # Define complete package mappings
     declare -A package_map=(
@@ -171,6 +163,11 @@ install_missing_background() {
         ["xz"]="xz-utils:xz:xz"
     )
     
+    # Critical commands that should be available immediately
+    local critical_commands=(
+        "git" "curl" "wget" "tree" "unzip" "nano" "make" "gcc"
+    )
+    
     # Install critical commands first
     for cmd in "${critical_commands[@]}"; do
         if ! command_exists "$cmd" && [[ -n "${package_map[$cmd]:-}" ]]; then
@@ -202,56 +199,51 @@ install_missing_background() {
         fi
     done
     
-    # Install other commands in background (non-blocking)
-    {
-        for cmd in "${!package_map[@]}"; do
-            # Skip if already processed in critical commands
-            local is_critical=false
-            for critical_cmd in "${critical_commands[@]}"; do
-                [[ "$cmd" == "$critical_cmd" ]] && { is_critical=true; break; }
-            done
-            [[ "$is_critical" == true ]] && continue
-            
-            if ! command_exists "$cmd"; then
-                log_info "Background installing: $cmd"
-                local packages="${package_map[$cmd]}"
-                local package
-                
-                # Get correct package name for package manager
-                case "$pm" in
-                    "pacman")
-                        package=$(echo "$packages" | cut -d: -f1)
-                        ;;
-                    "apt")
-                        package=$(echo "$packages" | cut -d: -f2)
-                        [[ -z "$package" ]] && package=$(echo "$packages" | cut -d: -f1)
-                        ;;
-                    "dnf"|"yum")
-                        package=$(echo "$packages" | cut -d: -f3)
-                        [[ -z "$package" ]] && package=$(echo "$packages" | cut -d: -f1)
-                        ;;
-                    *)
-                        package=$(echo "$packages" | cut -d: -f1)
-                        ;;
-                esac
-                
-                if install_package_silent "$package" "$pm"; then
-                    log_success "Background installed $package"
-                fi
-            fi
+    # Install other commands
+    for cmd in "${!package_map[@]}"; do
+        # Skip if already processed in critical commands
+        local is_critical=false
+        for critical_cmd in "${critical_commands[@]}"; do
+            [[ "$cmd" == "$critical_cmd" ]] && { is_critical=true; break; }
         done
+        [[ "$is_critical" == true ]] && continue
         
-        # Install version managers if not present
-        install_version_managers_background
-        create_directories_silent
-    } &
+        if ! command_exists "$cmd"; then
+            log_info "Background installing: $cmd"
+            local packages="${package_map[$cmd]}"
+            local package
+            
+            # Get correct package name for package manager
+            case "$pm" in
+                "pacman")
+                    package=$(echo "$packages" | cut -d: -f1)
+                    ;;
+                "apt")
+                    package=$(echo "$packages" | cut -d: -f2)
+                    [[ -z "$package" ]] && package=$(echo "$packages" | cut -d: -f1)
+                    ;;
+                "dnf"|"yum")
+                    package=$(echo "$packages" | cut -d: -f3)
+                    [[ -z "$package" ]] && package=$(echo "$packages" | cut -d: -f1)
+                    ;;
+                *)
+                    package=$(echo "$packages" | cut -d: -f1)
+                    ;;
+            esac
+            
+            if install_package_silent "$package" "$pm"; then
+                log_success "Background installed $package"
+            fi
+        fi
+    done
     
-    # Store background job PID
-    export INSTALLRC_BG_PID=$!
+    # Install version managers
+    _install_version_managers_background
+    _create_directories_silent
 }
 
 # Silent version manager installation
-install_version_managers_background() {
+_install_version_managers_background() {
     # NVM
     if [[ ! -d "$HOME/.nvm" ]] && command_exists curl; then
         log_info "Installing NVM..."
@@ -289,7 +281,7 @@ install_version_managers_background() {
 }
 
 # Create directories silently
-create_directories_silent() {
+_create_directories_silent() {
     local dirs=(
         "$HOME/.local/bin"
         "$HOME/github"
@@ -304,6 +296,21 @@ create_directories_silent() {
     done
 }
 
+# Background installation function - now much cleaner
+install_missing_background() {
+    local pm
+    pm=$(detect_package_manager)
+    
+    [[ "$pm" == "unknown" ]] && return 1
+    
+    # Start background worker with clean job description
+    _installrc_background_worker "$pm" &
+    
+    # Store background job PID and disown to prevent job control messages
+    export INSTALLRC_BG_PID=$!
+    disown %% 2>/dev/null || true
+}
+
 # Main execution - run automatically when sourced
 # Only run if we have sudo access (check if we're not already root and sudo exists)
 if [[ $EUID -ne 0 ]] && command_exists sudo && sudo -n true 2>/dev/null; then
@@ -315,10 +322,11 @@ else
     # No sudo access, only install user-level tools
     log_info "No sudo access detected, installing user-level tools only"
     {
-        install_version_managers_background
-        create_directories_silent
+        _install_version_managers_background
+        _create_directories_silent
     } &
     export INSTALLRC_BG_PID=$!
+    disown %% 2>/dev/null || true
 fi
 
 # Add function to check background installation status
@@ -353,8 +361,19 @@ installrc_install() {
     INSTALLRC_VERBOSE=1 install_missing_background
 }
 
-# Clean up any stale background processes on exit
-trap 'kill ${INSTALLRC_BG_PID} 2>/dev/null || true' EXIT
+# Kill background job on shell exit (cleaner than trap)
+_installrc_cleanup() {
+    [[ -n "${INSTALLRC_BG_PID:-}" ]] && kill "$INSTALLRC_BG_PID" 2>/dev/null || true
+}
+
+# Better cleanup handling
+if [[ -n "$BASH_VERSION" ]]; then
+    # For bash, use EXIT trap
+    trap '_installrc_cleanup' EXIT
+elif [[ -n "$ZSH_VERSION" ]]; then
+    # For zsh, use zshexit hook
+    zshexit_functions+=(_installrc_cleanup)
+fi
 
 # Log completion (only if verbose)
 log_info "Auto-installation initialized"
